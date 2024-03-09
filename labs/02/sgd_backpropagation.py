@@ -3,7 +3,10 @@ import argparse
 import datetime
 import os
 import re
-os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
+
+os.environ.setdefault(
+    "KERAS_BACKEND", "torch"
+)  # Use PyTorch backend unless specified otherwise
 
 import keras
 import numpy as np
@@ -16,11 +19,17 @@ parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
 parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
-parser.add_argument("--hidden_layer", default=100, type=int, help="Size of the hidden layer.")
+parser.add_argument(
+    "--hidden_layer", default=100, type=int, help="Size of the hidden layer."
+)
 parser.add_argument("--learning_rate", default=0.1, type=float, help="Learning rate.")
-parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
+parser.add_argument(
+    "--recodex", default=False, action="store_true", help="Evaluation in ReCodEx."
+)
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
-parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+parser.add_argument(
+    "--threads", default=1, type=int, help="Maximum number of threads to use."
+)
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -30,7 +39,11 @@ class Model(keras.Model):
         self._args = args
 
         self._W1 = keras.Variable(
-            keras.random.normal([MNIST.W * MNIST.H * MNIST.C, args.hidden_layer], stddev=0.1, seed=args.seed),
+            keras.random.normal(
+                [MNIST.W * MNIST.H * MNIST.C, args.hidden_layer],
+                stddev=0.1,
+                seed=args.seed,
+            ),
             trainable=True,
         )
         self._b1 = keras.Variable(keras.ops.zeros([args.hidden_layer]), trainable=True)
@@ -116,11 +129,19 @@ def main(args: argparse.Namespace) -> tuple[float, float]:
         torch.set_num_interop_threads(args.threads)
 
     # Create logdir name
-    args.logdir = os.path.join("logs", "{}-{}-{}".format(
-        os.path.basename(globals().get("__file__", "notebook")),
-        datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
-        ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", k), v) for k, v in sorted(vars(args).items())))
-    ))
+    args.logdir = os.path.join(
+        "logs",
+        "{}-{}-{}".format(
+            os.path.basename(globals().get("__file__", "notebook")),
+            datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
+            ",".join(
+                (
+                    "{}={}".format(re.sub("(.)[^_]*_?", r"\1", k), v)
+                    for k, v in sorted(vars(args).items())
+                )
+            ),
+        ),
+    )
 
     # Load data
     mnist = MNIST()
@@ -136,12 +157,18 @@ def main(args: argparse.Namespace) -> tuple[float, float]:
 
         # TODO: Evaluate the dev data using `evaluate` on `mnist.dev` dataset
         accuracy = ...
-        print("Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy), flush=True)
+        print(
+            "Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy),
+            flush=True,
+        )
         writer.add_scalar("dev/accuracy", 100 * accuracy, epoch + 1)
 
     # TODO: Evaluate the test data using `evaluate` on `mnist.test` dataset
     test_accuracy = ...
-    print("Test accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * test_accuracy), flush=True)
+    print(
+        "Test accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * test_accuracy),
+        flush=True,
+    )
     writer.add_scalar("test/accuracy", 100 * test_accuracy, epoch + 1)
 
     # Return dev and test accuracies for ReCodEx to validate.
