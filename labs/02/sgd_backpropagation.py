@@ -47,25 +47,25 @@ class Model(keras.Model):
             trainable=True,
         )
         self._b1 = keras.Variable(keras.ops.zeros([args.hidden_layer]), trainable=True)
-
-        # TODO: Create variables:
-        # - _W2, which is a trainable variable of size `[args.hidden_layer, MNIST.LABELS]`,
-        #   initialized to `keras.random.normal` value `with stddev=0.1` and `seed=args.seed`,
-        # - _b2, which is a trainable variable of size `[MNIST.LABELS]` initialized to zeros
-        ...
+        self._W2 = keras.Variable(
+            keras.random.normal(
+                [args.hidden_layer, MNIST.LABELS], stddev=0.1, seed=args.seed
+            ),
+            trainable=True,
+        )
+        self._b2 = keras.Variable(keras.ops.zeros([MNIST.LABELS]), trainable=True)
 
     def predict(self, inputs: torch.Tensor) -> torch.Tensor:
-        # TODO: Define the computation of the network. Notably:
-        # - start by casting the input byte image to `float32` with `keras.ops.cast`
-        # - then divide the tensor by 255 to normalize it to the `[0, 1]` range
-        # - then reshape it to the shape `[inputs.shape[0], -1]`.
-        #   The -1 is a wildcard which is computed so that the number
-        #   of elements before and after the reshape is preserved.
-        # - then multiply it by `self._W1` and then add `self._b1`
-        # - apply `keras.ops.tanh`
-        # - multiply the result by `self._W2` and then add `self._b2`
-        # - finally apply `keras.ops.softmax` and return the result
-        return ...
+
+        inputs = keras.ops.cast(inputs, dtype="float32")
+        inputs = inputs / 255.0
+        inputs = inputs.reshape([inputs.shape[0], -1])
+
+        first_layer_output = keras.ops.tanh(inputs @ self._W1 + self._b1)
+
+        output = keras.ops.softmax(first_layer_output @ self._W2 + self._b2)
+
+        return output
 
     def train_epoch(self, dataset: MNIST.Dataset) -> None:
         for batch in dataset.batches(self._args.batch_size):
@@ -76,7 +76,7 @@ class Model(keras.Model):
             # might be smaller.
 
             # TODO: Compute the predicted probabilities of the batch images using `self.predict`
-            probabilities = ...
+            probabilities = self.predict(inputs=batch["images"])
 
             # TODO: Manually compute the loss:
             # - For every batch example, the loss is the categorical crossentropy of the
@@ -84,7 +84,8 @@ class Model(keras.Model):
             #   - either use `keras.ops.one_hot` to obtain one-hot encoded gold labels,
             #   - or suitably use `keras.ops.take_along_axis` to "index" the predicted probabilities.
             # - Finally, compute the average across the batch examples.
-            loss = ...
+            labels_one_hot = keras.ops.one_hot(batch["labels"], MNIST.LABELS)
+            loss = -torch.sum(labels_one_hot * torch.log(probabilities), dim=1).mean()
 
             # We create a list of all variables. Note that a `keras.Model/Layer` automatically
             # tracks owned variables, so we could also use `self.trainable_variables`
@@ -95,7 +96,8 @@ class Model(keras.Model):
             # backpropagation algorithm by
             # - first resetting the gradients of all variables to zero with `self.zero_grad()`,
             # - then calling `loss.backward()`.
-            ...
+            self.zero_grad()
+            loss.backward()
 
             gradients = [variable.value.grad for variable in variables]
             with torch.no_grad():
@@ -104,7 +106,7 @@ class Model(keras.Model):
                     # for the variable and computed gradient. You can modify the
                     # variable value with `variable.assign` or in this case the more
                     # efficient `variable.assign_sub`.
-                    ...
+                    variable = variable - gradient * self._args.learning_rate
 
     def evaluate(self, dataset: MNIST.Dataset) -> float:
         # Compute the accuracy of the model prediction
@@ -152,27 +154,21 @@ def main(args: argparse.Namespace) -> tuple[float, float]:
     # Create the model
     model = Model(args)
 
-    for epoch in range(args.epochs):
-        # TODO: Run the `train_epoch` with `mnist.train` dataset
+    # for epoch in range(args.epochs):
+    #     # TODO: Run the `train_epoch` with `mnist.train` dataset
 
-        # TODO: Evaluate the dev data using `evaluate` on `mnist.dev` dataset
-        accuracy = ...
-        print(
-            "Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy),
-            flush=True,
-        )
-        writer.add_scalar("dev/accuracy", 100 * accuracy, epoch + 1)
+    #     # TODO: Evaluate the dev data using `evaluate` on `mnist.dev` dataset
+    #     accuracy = ...
+    #     print("Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy), flush=True)
+    #     writer.add_scalar("dev/accuracy", 100 * accuracy, epoch + 1)
 
-    # TODO: Evaluate the test data using `evaluate` on `mnist.test` dataset
-    test_accuracy = ...
-    print(
-        "Test accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * test_accuracy),
-        flush=True,
-    )
-    writer.add_scalar("test/accuracy", 100 * test_accuracy, epoch + 1)
+    # # TODO: Evaluate the test data using `evaluate` on `mnist.test` dataset
+    # test_accuracy = ...
+    # print("Test accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * test_accuracy), flush=True)
+    # writer.add_scalar("test/accuracy", 100 * test_accuracy, epoch + 1)
 
-    # Return dev and test accuracies for ReCodEx to validate.
-    return accuracy, test_accuracy
+    # # Return dev and test accuracies for ReCodEx to validate.
+    # return accuracy, test_accuracy
 
 
 if __name__ == "__main__":
