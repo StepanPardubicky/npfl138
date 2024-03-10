@@ -67,7 +67,7 @@ class Model(keras.Model):
 
         return output
 
-    def train_epoch(self, dataset: MNIST.Dataset) -> None:
+    def train_epoch(self, dataset) -> None:
         for batch in dataset.batches(self._args.batch_size):
             # The batch contains
             # - batch["images"] with shape [?, MNIST.H, MNIST.W, MNIST.C]
@@ -106,19 +106,22 @@ class Model(keras.Model):
                     # for the variable and computed gradient. You can modify the
                     # variable value with `variable.assign` or in this case the more
                     # efficient `variable.assign_sub`.
-                    variable = variable - gradient * self._args.learning_rate
+                    variable.assign(variable - gradient * self._args.learning_rate)
+            # print(torch.tensor(self._W1.numpy()))
 
-    def evaluate(self, dataset: MNIST.Dataset) -> float:
+    def evaluate(self, dataset) -> float:
         # Compute the accuracy of the model prediction
         correct = 0
         for batch in dataset.batches(self._args.batch_size):
             # TODO: Compute the probabilities of the batch images using `self.predict`
             # and convert them to Numpy with `keras.ops.convert_to_numpy`.
-            probabilities = ...
+            probabilities = keras.ops.convert_to_numpy(self.predict(batch["images"]))
+
+            predicted_labels = np.argmax(probabilities, axis=1)
 
             # TODO: Evaluate how many batch examples were predicted
             # correctly and increase `correct` variable accordingly.
-            correct += ...
+            correct += np.sum(predicted_labels == batch["labels"])
 
         return correct / dataset.size
 
@@ -154,21 +157,28 @@ def main(args: argparse.Namespace) -> tuple[float, float]:
     # Create the model
     model = Model(args)
 
-    # for epoch in range(args.epochs):
-    #     # TODO: Run the `train_epoch` with `mnist.train` dataset
+    for epoch in range(args.epochs):
+        # TODO: Run the `train_epoch` with `mnist.train` dataset
+        model.train_epoch(dataset=mnist.train)
 
-    #     # TODO: Evaluate the dev data using `evaluate` on `mnist.dev` dataset
-    #     accuracy = ...
-    #     print("Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy), flush=True)
-    #     writer.add_scalar("dev/accuracy", 100 * accuracy, epoch + 1)
+        # TODO: Evaluate the dev data using `evaluate` on `mnist.dev` dataset
+        accuracy = model.evaluate(dataset=mnist.dev)
+        print(
+            "Dev accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * accuracy),
+            flush=True,
+        )
+        writer.add_scalar("dev/accuracy", 100 * accuracy, epoch + 1)
 
-    # # TODO: Evaluate the test data using `evaluate` on `mnist.test` dataset
-    # test_accuracy = ...
-    # print("Test accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * test_accuracy), flush=True)
-    # writer.add_scalar("test/accuracy", 100 * test_accuracy, epoch + 1)
+    # TODO: Evaluate the test data using `evaluate` on `mnist.test` dataset
+    test_accuracy = model.evaluate(dataset=mnist.test)
+    print(
+        "Test accuracy after epoch {} is {:.2f}".format(epoch + 1, 100 * test_accuracy),
+        flush=True,
+    )
+    writer.add_scalar("test/accuracy", 100 * test_accuracy, epoch + 1)
 
-    # # Return dev and test accuracies for ReCodEx to validate.
-    # return accuracy, test_accuracy
+    # Return dev and test accuracies for ReCodEx to validate.
+    return accuracy, test_accuracy
 
 
 if __name__ == "__main__":
