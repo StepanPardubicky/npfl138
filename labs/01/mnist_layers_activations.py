@@ -3,7 +3,10 @@ import argparse
 import datetime
 import os
 import re
-os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
+
+os.environ.setdefault(
+    "KERAS_BACKEND", "torch"
+)  # Use PyTorch backend unless specified otherwise
 
 import keras
 import torch
@@ -12,14 +15,25 @@ from mnist import MNIST
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
-parser.add_argument("--activation", default="none", choices=["none", "relu", "tanh", "sigmoid"], help="Activation.")
+parser.add_argument(
+    "--activation",
+    default="none",
+    choices=["none", "relu", "tanh", "sigmoid"],
+    help="Activation.",
+)
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
 parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
-parser.add_argument("--hidden_layer", default=100, type=int, help="Size of the hidden layer.")
+parser.add_argument(
+    "--hidden_layer", default=100, type=int, help="Size of the hidden layer."
+)
 parser.add_argument("--hidden_layers", default=1, type=int, help="Number of layers.")
-parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
+parser.add_argument(
+    "--recodex", default=False, action="store_true", help="Evaluation in ReCodEx."
+)
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
-parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+parser.add_argument(
+    "--threads", default=1, type=int, help="Maximum number of threads to use."
+)
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -31,7 +45,10 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
     def writer(self, writer):
         if writer not in self._writers:
             import torch.utils.tensorboard
-            self._writers[writer] = torch.utils.tensorboard.SummaryWriter(os.path.join(self._path, writer))
+
+            self._writers[writer] = torch.utils.tensorboard.SummaryWriter(
+                os.path.join(self._path, writer)
+            )
         return self._writers[writer]
 
     def add_logs(self, writer, logs, step):
@@ -42,10 +59,24 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         if logs:
-            if isinstance(getattr(self.model, "optimizer", None), keras.optimizers.Optimizer):
-                logs = logs | {"learning_rate": keras.ops.convert_to_numpy(self.model.optimizer.learning_rate)}
-            self.add_logs("train", {k: v for k, v in logs.items() if not k.startswith("val_")}, epoch + 1)
-            self.add_logs("val", {k[4:]: v for k, v in logs.items() if k.startswith("val_")}, epoch + 1)
+            if isinstance(
+                getattr(self.model, "optimizer", None), keras.optimizers.Optimizer
+            ):
+                logs = logs | {
+                    "learning_rate": keras.ops.convert_to_numpy(
+                        self.model.optimizer.learning_rate
+                    )
+                }
+            self.add_logs(
+                "train",
+                {k: v for k, v in logs.items() if not k.startswith("val_")},
+                epoch + 1,
+            )
+            self.add_logs(
+                "val",
+                {k[4:]: v for k, v in logs.items() if k.startswith("val_")},
+                epoch + 1,
+            )
 
 
 def main(args: argparse.Namespace) -> dict[str, float]:
@@ -56,11 +87,19 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         torch.set_num_interop_threads(args.threads)
 
     # Create logdir name
-    args.logdir = os.path.join("logs", "{}-{}-{}".format(
-        os.path.basename(globals().get("__file__", "notebook")),
-        datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
-        ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", k), v) for k, v in sorted(vars(args).items())))
-    ))
+    args.logdir = os.path.join(
+        "logs",
+        "{}-{}-{}".format(
+            os.path.basename(globals().get("__file__", "notebook")),
+            datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
+            ",".join(
+                (
+                    "{}={}".format(re.sub("(.)[^_]*_?", r"\1", k), v)
+                    for k, v in sorted(vars(args).items())
+                )
+            ),
+        ),
+    )
 
     # Load data
     mnist = MNIST()
@@ -84,14 +123,20 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     )
 
     logs = model.fit(
-        mnist.train.data["images"], mnist.train.data["labels"],
-        batch_size=args.batch_size, epochs=args.epochs,
+        mnist.train.data["images"],
+        mnist.train.data["labels"],
+        batch_size=args.batch_size,
+        epochs=args.epochs,
         validation_data=(mnist.dev.data["images"], mnist.dev.data["labels"]),
         callbacks=[TorchTensorBoardCallback(args.logdir)],
     )
 
     # Return development metrics for ReCodEx to validate.
-    return {metric: values[-1] for metric, values in logs.history.items() if metric.startswith("val_")}
+    return {
+        metric: values[-1]
+        for metric, values in logs.history.items()
+        if metric.startswith("val_")
+    }
 
 
 if __name__ == "__main__":

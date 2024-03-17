@@ -3,7 +3,10 @@ import argparse
 import datetime
 import os
 import re
-os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
+
+os.environ.setdefault(
+    "KERAS_BACKEND", "torch"
+)  # Use PyTorch backend unless specified otherwise
 
 import keras
 import numpy as np
@@ -11,15 +14,25 @@ import torch
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
-parser.add_argument("--evaluate", default=False, action="store_true", help="Evaluate the given model")
-parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
-parser.add_argument("--render", default=False, action="store_true", help="Render during evaluation")
+parser.add_argument(
+    "--evaluate", default=False, action="store_true", help="Evaluate the given model"
+)
+parser.add_argument(
+    "--recodex", default=False, action="store_true", help="Evaluation in ReCodEx."
+)
+parser.add_argument(
+    "--render", default=False, action="store_true", help="Render during evaluation"
+)
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
-parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+parser.add_argument(
+    "--threads", default=1, type=int, help="Maximum number of threads to use."
+)
 # If you add more arguments, ReCodEx will keep them with your default values.
-parser.add_argument("--batch_size", default=..., type=int, help="Batch size.")
-parser.add_argument("--epochs", default=..., type=int, help="Number of epochs.")
-parser.add_argument("--model", default="gym_cartpole_model.keras", type=str, help="Output model path.")
+parser.add_argument("--batch_size", default=5, type=int, help="Batch size.")
+parser.add_argument("--epochs", default=21, type=int, help="Number of epochs.")
+parser.add_argument(
+    "--model", default="gym_cartpole_model.keras", type=str, help="Output model path."
+)
 
 
 class TorchTensorBoardCallback(keras.callbacks.Callback):
@@ -30,7 +43,10 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
     def writer(self, writer):
         if writer not in self._writers:
             import torch.utils.tensorboard
-            self._writers[writer] = torch.utils.tensorboard.SummaryWriter(os.path.join(self._path, writer))
+
+            self._writers[writer] = torch.utils.tensorboard.SummaryWriter(
+                os.path.join(self._path, writer)
+            )
         return self._writers[writer]
 
     def add_logs(self, writer, logs, step):
@@ -41,14 +57,32 @@ class TorchTensorBoardCallback(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         if logs:
-            if isinstance(getattr(self.model, "optimizer", None), keras.optimizers.Optimizer):
-                logs = logs | {"learning_rate": keras.ops.convert_to_numpy(self.model.optimizer.learning_rate)}
-            self.add_logs("train", {k: v for k, v in logs.items() if not k.startswith("val_")}, epoch + 1)
-            self.add_logs("val", {k[4:]: v for k, v in logs.items() if k.startswith("val_")}, epoch + 1)
+            if isinstance(
+                getattr(self.model, "optimizer", None), keras.optimizers.Optimizer
+            ):
+                logs = logs | {
+                    "learning_rate": keras.ops.convert_to_numpy(
+                        self.model.optimizer.learning_rate
+                    )
+                }
+            self.add_logs(
+                "train",
+                {k: v for k, v in logs.items() if not k.startswith("val_")},
+                epoch + 1,
+            )
+            self.add_logs(
+                "val",
+                {k[4:]: v for k, v in logs.items() if k.startswith("val_")},
+                epoch + 1,
+            )
 
 
 def evaluate_model(
-    model: keras.Model, seed: int = 42, episodes: int = 100, render: bool = False, report_per_episode: bool = False
+    model: keras.Model,
+    seed: int = 42,
+    episodes: int = 100,
+    render: bool = False,
+    report_per_episode: bool = False,
 ) -> float:
     """Evaluate the given model on CartPole-v1 environment.
 
@@ -71,7 +105,9 @@ def evaluate_model(
             elif len(prediction) == 2:
                 action = np.argmax(prediction)
             else:
-                raise ValueError("Unknown model output shape, only 1 or 2 outputs are supported")
+                raise ValueError(
+                    "Unknown model output shape, only 1 or 2 outputs are supported"
+                )
 
             observation, reward, terminated, truncated, info = env.step(action)
             score += reward
@@ -92,11 +128,19 @@ def main(args: argparse.Namespace) -> keras.Model | None:
 
     if not args.evaluate:
         # Create logdir name
-        args.logdir = os.path.join("logs", "{}-{}-{}".format(
-            os.path.basename(globals().get("__file__", "notebook")),
-            datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
-            ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", k), v) for k, v in sorted(vars(args).items())))
-        ))
+        args.logdir = os.path.join(
+            "logs",
+            "{}-{}-{}".format(
+                os.path.basename(globals().get("__file__", "notebook")),
+                datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
+                ",".join(
+                    (
+                        "{}={}".format(re.sub("(.)[^_]*_?", r"\1", k), v)
+                        for k, v in sorted(vars(args).items())
+                    )
+                ),
+            ),
+        )
 
         # Load the data
         data = np.loadtxt("gym_cartpole_data.txt")
@@ -106,13 +150,33 @@ def main(args: argparse.Namespace) -> keras.Model | None:
         # the model can perform any of:
         # - binary classification with 1 output and sigmoid activation;
         # - two-class classification with 2 outputs and softmax activation.
-        model = ...
+        model = keras.Sequential(
+            [
+                keras.layers.UnitNormalization(),
+                keras.layers.Dense(6, activation="relu"),
+                keras.layers.Dense(1, activation="sigmoid"),
+            ]
+        )
 
         # TODO: Prepare the model for training using the `model.compile` method.
-        model.compile(...)
+        model.compile(
+            optimizer=keras.optimizers.AdamW(
+                learning_rate=keras.optimizers.schedules.PolynomialDecay(
+                    0.001, args.epochs * (100 // args.batch_size)
+                )
+            ),
+            loss=keras.losses.BinaryCrossentropy(),
+            metrics=[keras.metrics.BinaryAccuracy("accuracy")],
+        )
 
         tb_callback = TorchTensorBoardCallback(args.logdir)
-        model.fit(observations, labels, batch_size=args.batch_size, epochs=args.epochs, callbacks=[tb_callback])
+        model.fit(
+            observations,
+            labels,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            callbacks=[tb_callback],
+        )
 
         # Save the model, without the optimizer state.
         model.save(args.model)
@@ -124,7 +188,9 @@ def main(args: argparse.Namespace) -> keras.Model | None:
         if args.recodex:
             return model
         else:
-            score = evaluate_model(model, seed=args.seed, render=args.render, report_per_episode=True)
+            score = evaluate_model(
+                model, seed=args.seed, render=args.render, report_per_episode=True
+            )
             print("The average score was {}.".format(score))
 
 
