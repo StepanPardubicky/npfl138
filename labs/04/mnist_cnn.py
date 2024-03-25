@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import os
-os.environ.setdefault("KERAS_BACKEND", "torch")  # Use PyTorch backend unless specified otherwise
+import re
+
+os.environ.setdefault(
+    "KERAS_BACKEND", "torch"
+)  # Use PyTorch backend unless specified otherwise
 
 import keras
 import torch
@@ -11,11 +15,20 @@ from mnist import MNIST
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
-parser.add_argument("--cnn", default=None, type=str, help="CNN architecture.")
-parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
-parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
+parser.add_argument(
+    "--cnn",
+    default="CB-8-3-5-valid,R-[CB-8-3-1-same,CB-8-3-1-same],F,H-50",
+    type=str,
+    help="CNN architecture.",
+)
+parser.add_argument("--epochs", default=1, type=int, help="Number of epochs.")
+parser.add_argument(
+    "--recodex", default=False, action="store_true", help="Evaluation in ReCodEx."
+)
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
-parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+parser.add_argument(
+    "--threads", default=1, type=int, help="Maximum number of threads to use."
+)
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -25,6 +38,103 @@ class Model(keras.Model):
         # feel free to use subclassing if you want.
         inputs = keras.Input(shape=[MNIST.H, MNIST.W, MNIST.C])
         hidden = keras.layers.Rescaling(1 / 255)(inputs)
+
+        def split_string_ignore_square_brackets(input_string):
+            pattern = r",(?![^\[\]]*\])"
+            return re.split(pattern, input_string)
+
+        def extract_inside_square_brackets(input_string):
+            pattern = r"\[([^\[\]]*)\]"
+            match = re.search(pattern, input_string)
+            if match:
+                return match.group(1)
+            else:
+                return None
+
+        layers = split_string_ignore_square_brackets(args.cnn)
+        print(layers)
+        # layers = args.cnn.split(",")
+
+        for layer in layers:
+            ##Check what layer is to be implemented by checking first letter(s) of the layer string
+            splitted_layer = layer.split("-")
+            layer_annotation = splitted_layer[0]
+            if layer_annotation == "C":
+                ##Convolutional layer with ReLU
+                hidden = keras.layers.Conv2D(
+                    filters=int(splitted_layer[1]),
+                    kernel_size=int(splitted_layer[2]),
+                    strides=(int(splitted_layer[3]), int(splitted_layer[3])),
+                    padding=splitted_layer[4],
+                    activation="relu",
+                )(hidden)
+
+            elif layer_annotation == "CB":
+                # Convolutional layer with batch normalization
+                # Has to be split into 3 parts:
+                # - Convolutional layer (without activation)
+                # - Batch normalization
+                # - ReLU activation
+
+                hidden = keras.layers.Conv2D(
+                    filters=int(splitted_layer[1]),
+                    kernel_size=int(splitted_layer[2]),
+                    strides=(int(splitted_layer[3]), int(splitted_layer[3])),
+                    padding=splitted_layer[4],
+                    activation=None,
+                    use_bias=False,
+                )(hidden)
+                hidden = keras.layers.BatchNormalization()(hidden)
+                hidden = keras.layers.Activation("relu")(hidden)
+
+            elif layer_annotation == "M":
+                # Max pooling layer
+                hidden = keras.layers.MaxPooling2D(
+                    pool_size=(int(splitted_layer[1]), int(splitted_layer[1])),
+                    strides=int(splitted_layer[2]),
+                )(hidden)
+
+            elif layer_annotation == "R":
+                # Residual connection
+                res_input = hidden
+                inner_layers = extract_inside_square_brackets(layer).split(",")
+                for inner_layer in inner_layers:
+                    inner_layer_split = inner_layer.split("-")
+                    if inner_layer_split[0] == "C":
+                        hidden = keras.layers.Conv2D(
+                            filters=int(inner_layer_split[1]),
+                            kernel_size=int(inner_layer_split[2]),
+                            strides=int(inner_layer_split[3]),
+                            padding=inner_layer_split[4],
+                            activation="relu",
+                        )(hidden)
+                    elif inner_layer_split[0] == "CB":
+                        hidden = keras.layers.Conv2D(
+                            filters=int(inner_layer_split[1]),
+                            kernel_size=int(inner_layer_split[2]),
+                            strides=int(inner_layer_split[3]),
+                            padding=inner_layer_split[4],
+                            activation=None,
+                            use_bias=False,
+                        )(hidden)
+                        hidden = keras.layers.BatchNormalization()(hidden)
+                        hidden = keras.layers.Activation("relu")(hidden)
+
+                hidden = keras.layers.Add()([res_input, hidden])
+
+            elif layer_annotation == "F":
+                ##Flatten the inputs
+                hidden = keras.layers.Flatten()(hidden)
+
+            elif layer_annotation == "H":
+                # TODO: Hidden layer
+                hidden = keras.layers.Dense(
+                    units=int(splitted_layer[1]), activation="relu"
+                )(hidden)
+
+            elif layer_annotation == "D":
+                # Dropout layer
+                hidden = keras.layers.Dropout(rate=float(splitted_layer[1]))(hidden)
 
         # TODO: Add CNN layers specified by `args.cnn`, which contains
         # a comma-separated list of the following layers:
@@ -46,7 +156,6 @@ class Model(keras.Model):
         # You can assume the resulting network is valid; it is fine to crash if it is not.
         #
         # Produce the results in the variable `hidden`.
-        hidden = ...
 
         # Add the final output layer
         outputs = keras.layers.Dense(MNIST.LABELS, activation="softmax")(hidden)
@@ -73,13 +182,19 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     model = Model(args)
 
     logs = model.fit(
-        mnist.train.data["images"], mnist.train.data["labels"],
-        batch_size=args.batch_size, epochs=args.epochs,
+        mnist.train.data["images"],
+        mnist.train.data["labels"],
+        batch_size=args.batch_size,
+        epochs=args.epochs,
         validation_data=(mnist.dev.data["images"], mnist.dev.data["labels"]),
     )
 
     # Return development metrics for ReCodEx to validate.
-    return {metric: values[-1] for metric, values in logs.history.items() if metric.startswith("val_")}
+    return {
+        metric: values[-1]
+        for metric, values in logs.history.items()
+        if metric.startswith("val_")
+    }
 
 
 if __name__ == "__main__":
