@@ -127,6 +127,11 @@ def main(args: argparse.Namespace) -> keras.Model | None:
         torch.set_num_interop_threads(args.threads)
 
     if not args.evaluate:
+        if args.batch_size is ...:
+            raise ValueError("You must specify the batch size, either in the defaults or on the command line.")
+        if args.epochs is ...:
+            raise ValueError("You must specify the number of epochs, either in the defaults or on the command line.")
+
         # Create logdir name
         args.logdir = os.path.join(
             "logs",

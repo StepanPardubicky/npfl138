@@ -72,3 +72,81 @@
 
 - How are weights and biases initialized using the default Glorot
   initialization? [5]
+
+#### Questions@:, Lecture 4 Questions
+- Write down the equation of how convolution of a given image is computed.
+  Assume the input is an image $I$ of size $H \times W$ with $C$ channels, the
+  kernel $K$ has size $N \times M$, the stride is $T \times S$, the operation
+  performed is in fact cross-correlation (as usual in convolutional neural
+  networks) and that $O$ output channels are computed. [5]
+
+- Explain both `SAME` and `VALID` padding schemes and write down the output
+  size of a convolutional operation with an $N \times M$ kernel on image
+  of size $H \times W$ for both these padding schemes (stride is 1). [5]
+
+- Describe batch normalization including all its parameters, and write down an
+  algorithm how it is used during training and the algorithm how it is used
+  during inference. Be sure to explicitly write over what is being normalized in
+  case of fully connected layers and in case of convolutional layers. [10]
+
+- Describe overall architecture of VGG-19 (you do not need to remember the exact
+  number of layers/filters, but you should describe which layers are used). [5]
+
+#### Questions@:, Lecture 5 Questions
+- Describe overall architecture of ResNet. You do not need to remember the exact
+  number of layers/filters, but you should draw a bottleneck block (including
+  the applications of BatchNorms and ReLUs) and state how residual connections
+  work when the number of channels increases. [10]
+
+- Draw the original ResNet block (including the exact positions of BatchNorms
+  and ReLUs) and also the improved variant with full pre-activation. [5]
+
+- Compare the bottleneck block of ResNet and ResNeXt architectures (draw the
+  latter using convolutions only, i.e., do not use grouped convolutions). [5]
+
+- Describe the CNN regularization method of networks with stochastic depth. [5]
+
+- Compare Cutout and DropBlock. [5]
+
+- Describe in detail how is CutMix performed. [5]
+
+- Describe Squeeze and Excitation applied to a ResNet block. [5]
+
+- Draw the Mobile inverted bottleneck block (including explanation of separable
+  convolutions, the expansion factor, exact positions of BatchNorms and ReLUs,
+  but without describing Squeeze and excitation blocks). [5]
+
+- Assume an input image $I$ of size $H \times W$ with $C$ channels, and
+  a convolutional kernel $K$ with size $N \times M$, stride $S$ and $O$ output
+  channels. Write down (or derive) the equation of transposed convolution
+  (or equivalently backpropagation through a convolution to its inputs). [5]
+
+#### Questions@:, Lecture 6 Questions
+- Describe the differences among semantic segmentation, image classification,
+  object detection, and instance segmentation, and write down which metrics
+  are used for these tasks. [5]
+
+- Write down how is $\mathit{AP}_{50}$ computed. [5]
+
+- Considering a Fast-RCNN architecture, draw overall network architecture,
+  explain what a RoI-pooling layer is, show how the network parametrizes
+  bounding boxes and write down the loss. Finally, describe non-maximum
+  suppression and how the Fast-RCNN prediction is performed. [10]
+
+- Considering a Faster-RCNN architecture, describe the region proposal network
+  (what are anchors, architecture including both heads, how are the coordinates
+  of proposals parametrized, what does the loss look like). [10]
+
+- Considering Mask-RCNN architecture, describe the additions to a Faster-RCNN
+  architecture (the RoI-Align layer, the new mask-producing head). [5]
+
+- Write down the focal loss with class weighting, including the commonly used
+  hyperparameter values. [5]
+
+- Draw the overall architecture of a RetinaNet architecture (the computation of
+  $C_1, \ldots, C_7$, the FPN architecture computing $P_1, \ldots, P_7$
+  including the block combining feature maps of different resolutions; the
+  classification and bounding box generation heads, including their output
+  size). Write down the losses for both heads. [10]
+
+- Describe GroupNorm, and compare it to BatchNorm and LayerNorm. [5]
