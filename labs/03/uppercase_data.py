@@ -31,10 +31,14 @@ import numpy as np
 class UppercaseData:
     LABELS: int = 2
 
-    _URL: str = "https://ufal.mff.cuni.cz/~straka/courses/npfl138/2324/datasets/uppercase_data.zip"
+    _URL: str = (
+        "https://ufal.mff.cuni.cz/~straka/courses/npfl138/2324/datasets/uppercase_data.zip"
+    )
 
     class Dataset:
-        def __init__(self, data: str, window: int, alphabet: int | list[str], seed: int = 42) -> None:
+        def __init__(
+            self, data: str, window: int, alphabet: int | list[str], seed: int = 42
+        ) -> None:
             self._window = window
             self._text = data
             self._size = len(self._text)
@@ -50,7 +54,9 @@ class UppercaseData:
                 for char in self._text.lower():
                     freqs[char] = freqs.get(char, 0) + 1
 
-                most_frequent = sorted(freqs.items(), key=lambda item: item[1], reverse=True)
+                most_frequent = sorted(
+                    freqs.items(), key=lambda item: item[1], reverse=True
+                )
                 for i, (char, freq) in enumerate(most_frequent, len(alphabet_map)):
                     alphabet_map[char] = i
                     if alphabet and len(alphabet_map) >= alphabet:
@@ -68,7 +74,7 @@ class UppercaseData:
             windows = np.zeros([self._size, 2 * window + 1], np.int16)
             labels = np.zeros(self._size, np.uint8)
             for i in range(self._size):
-                windows[i] = lcletters[i:i + 2 * window + 1]
+                windows[i] = lcletters[i : i + 2 * window + 1]
                 labels[i] = self._text[i].isupper()
             self._data = {"windows": windows, "labels": labels}
 
@@ -102,13 +108,21 @@ class UppercaseData:
 
         with zipfile.ZipFile(path, "r") as zip_file:
             for dataset in ["train", "dev", "test"]:
-                with zip_file.open("{}_{}.txt".format(os.path.splitext(path)[0], dataset), "r") as dataset_file:
+                with zip_file.open(
+                    "{}_{}.txt".format(os.path.splitext(path)[0], dataset), "r"
+                ) as dataset_file:
                     data = dataset_file.read().decode("utf-8")
-                setattr(self, dataset, self.Dataset(
-                    data,
-                    window,
-                    alphabet=alphabet_size if dataset == "train" else self.train.alphabet,
-                ))
+                setattr(
+                    self,
+                    dataset,
+                    self.Dataset(
+                        data,
+                        window,
+                        alphabet=(
+                            alphabet_size if dataset == "train" else self.train.alphabet
+                        ),
+                    ),
+                )
 
     train: Dataset
     dev: Dataset
@@ -120,16 +134,27 @@ class UppercaseData:
         gold = gold_dataset.text
 
         if len(predictions) < len(gold):
-            raise RuntimeError("The predictions are shorter than gold data: {} vs {}.".format(
-                len(predictions), len(gold)))
+            raise RuntimeError(
+                "The predictions are shorter than gold data: {} vs {}.".format(
+                    len(predictions), len(gold)
+                )
+            )
 
         correct = 0
         for i in range(len(gold)):
             # Note that just the lower() condition is not enough, for example
             # u03c2 and u03c3 have both u03c2 as an uppercase character.
-            if predictions[i].lower() != gold[i].lower() and predictions[i].upper() != gold[i].upper():
-                raise RuntimeError("The predictions and gold data differ on position {}: {} vs {}.".format(
-                    i, repr(predictions[i:i + 20].lower()), repr(gold[i:i + 20].lower())))
+            if (
+                predictions[i].lower() != gold[i].lower()
+                and predictions[i].upper() != gold[i].upper()
+            ):
+                raise RuntimeError(
+                    "The predictions and gold data differ on position {}: {} vs {}.".format(
+                        i,
+                        repr(predictions[i : i + 20].lower()),
+                        repr(gold[i : i + 20].lower()),
+                    )
+                )
 
             correct += gold[i] == predictions[i]
         return 100 * correct / len(gold)
@@ -142,12 +167,19 @@ class UppercaseData:
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--evaluate", default=None, type=str, help="Prediction file to evaluate")
-    parser.add_argument("--dataset", default="dev", type=str, help="Gold dataset to evaluate")
+    parser.add_argument(
+        "--evaluate", default=None, type=str, help="Prediction file to evaluate"
+    )
+    parser.add_argument(
+        "--dataset", default="dev", type=str, help="Gold dataset to evaluate"
+    )
     args = parser.parse_args()
 
     if args.evaluate:
         with open(args.evaluate, "r", encoding="utf-8-sig") as predictions_file:
-            accuracy = UppercaseData.evaluate_file(getattr(UppercaseData(0), args.dataset), predictions_file)
+            accuracy = UppercaseData.evaluate_file(
+                getattr(UppercaseData(0), args.dataset), predictions_file
+            )
         print("Uppercase accuracy: {:.2f}%".format(accuracy))
