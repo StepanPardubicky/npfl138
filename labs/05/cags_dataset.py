@@ -56,7 +56,7 @@ class CAGS:
             return CAGS.TransformedDataset(self, transform)
 
     class TransformedDataset(torch.utils.data.Dataset):
-        def __init__(self, dataset: "Dataset", transform: Callable[[dict[str, torch.Tensor]], Any]) -> None:
+        def __init__(self, dataset: "CAGS.Dataset", transform: Callable[[dict[str, torch.Tensor]], Any]) -> None:
             self._dataset = dataset
             self._transform = transform
 
@@ -65,6 +65,9 @@ class CAGS:
 
         def __getitem__(self, index: int) -> Any:
             return self._transform(self._dataset[index])
+
+        def transform(self, transform: Callable[[dict[str, torch.Tensor]], Any]) -> torch.utils.data.Dataset:
+            return CAGS.TransformedDataset(self, transform)
 
     def __init__(self) -> None:
         for dataset, size in [("train", 2_142), ("dev", 306), ("test", 612)]:
@@ -116,19 +119,16 @@ class CAGS:
 
                     get_value_of_kind(0x12)
                     if data[offset] == 0x0A:
-                        get_value_of_kind(0x0A)
-                        length = get_value_of_kind(0x0A)
+                        length = get_value_of_kind(0x0A) and get_value_of_kind(0x0A)
                         entries[-1][key] = np.frombuffer(data, np.uint8, length, offset).copy(); offset += length
                     elif data[offset] == 0x1A:
-                        get_value_of_kind(0x1A)
-                        length = get_value_of_kind(0x0A)
+                        length = get_value_of_kind(0x1A) and get_value_of_kind(0x0A)
                         values, target_offset = [], offset + length
                         while offset < target_offset:
                             values.append(get_value())
                         entries[-1][key] = np.array(values, dtype=np.int64)
                     elif data[offset] == 0x12:
-                        get_value_of_kind(0x12)
-                        length = get_value_of_kind(0x0A)
+                        length = get_value_of_kind(0x12) and get_value_of_kind(0x0A)
                         entries[-1][key] = np.frombuffer(
                             data, np.dtype("<f4"), length >> 2, offset).astype(np.float32).copy(); offset += length
                     else:
