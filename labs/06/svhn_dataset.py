@@ -1,7 +1,7 @@
 import array
 import os
-import sys
 import struct
+import sys
 from typing import Any, Callable, Sequence, TextIO, TypedDict
 import urllib.request
 
@@ -123,7 +123,7 @@ class SVHN:
                     key = data[offset:offset + length].decode("utf-8"); offset += length
                     get_value_of_kind(0x12)
                     if key not in arrays:
-                        arrays[key] = array.array({0x0A: "B", 0x1A: "Q", 0x12: "f"}.get(data[offset], "B"))
+                        arrays[key] = array.array({0x0A: "B", 0x1A: "q", 0x12: "f"}.get(data[offset], "B"))
                         indices[key] = array.array("L", [0])
 
                     if data[offset] == 0x0A:
@@ -146,7 +146,7 @@ class SVHN:
     # Evaluation infrastructure.
     @staticmethod
     def evaluate(
-        gold_dataset: "SVHN.Dataset", predictions: Sequence[tuple[list[int], list[BBox]]], iou_threshold: float = 0.5,
+        gold_dataset: Dataset, predictions: Sequence[tuple[list[int], list[BBox]]], iou_threshold: float = 0.5,
     ) -> float:
         def bbox_iou(x: SVHN.BBox, y: SVHN.BBox) -> float:
             def area(bbox: SVHN.BBox) -> float:

@@ -13,16 +13,15 @@ from morpho_dataset import MorphoDataset
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--batch_size", default=10, type=int, help="Batch size.")
-parser.add_argument("--cle_dim", default=32, type=int, help="CLE embedding dimension.")
 parser.add_argument("--epochs", default=5, type=int, help="Number of epochs.")
+parser.add_argument("--label_smoothing", default=0.0, type=float, help="Label smoothing.")
 parser.add_argument("--max_sentences", default=None, type=int, help="Maximum number of sentences to load.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--rnn", default="LSTM", choices=["LSTM", "GRU"], help="RNN layer type.")
 parser.add_argument("--rnn_dim", default=64, type=int, help="RNN layer dimension.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
-parser.add_argument("--we_dim", default=64, type=int, help="Word embedding dimension.")
-parser.add_argument("--word_masking", default=0.0, type=float, help="Mask words with the given probability.")
+parser.add_argument("--we_dim", default=128, type=int, help="Word embedding dimension.")
 # If you add more arguments, ReCodEx will keep them with your default values.
 
 
@@ -211,51 +210,56 @@ class TrainableModule(torch.nn.Module):
                     parameter.data[module.hidden_size:module.hidden_size * 2] = 1
 
 
+class SpanEncodingF1Metric(torchmetrics.classification.BinaryF1Score):
+    """Metric for evaluating F1 score of BIO-encoded sequences."""
+    def __init__(self, labels: list[str], ignore_index: int):
+        super().__init__()
+        self._labels = labels
+        self._ignore_index = ignore_index
+
+    def update(self, pred: torch.Tensor, true: torch.Tensor) -> None:
+        true = torch.nn.functional.pad(true, (0, 1), value=self._ignore_index).view(-1)
+        pred = torch.nn.functional.pad(pred, (0, 1), value=self._ignore_index).view(-1)
+        spans_pred, spans_true = set(), set()
+        for spans, tags in [(spans_true, true), (spans_pred, pred)]:
+            span, offset = None, 0
+            for tag in tags:
+                label = self._labels[tag]
+                if span and (label.startswith(("O", "B")) or tag == self._ignore_index):
+                    spans.add((start, offset, span))
+                    span = None
+                if not span and label.startswith(("B", "I")):
+                    span, start = label[2:], offset
+                if tag != self._ignore_index:
+                    offset += 1
+        spans_all = list(spans_pred | spans_true)
+        if spans_all:
+            super().update(torch.tensor([span in spans_pred for span in spans_all]),
+                           torch.tensor([span in spans_true for span in spans_all]))
+
+
 class Model(TrainableModule):
-    class MaskElements(torch.nn.Module):
-        """A layer randomly masking elements with a given value."""
-        def __init__(self, mask_probability, mask_value):
-            super().__init__()
-            self._mask_probability = mask_probability
-            self._mask_value = mask_value
-
-        def forward(self, inputs):
-            # Only mask during training and when the mask probability is non-zero.
-            if self.training and self._mask_probability:
-                # TODO: Generate a mask tensor of `torch.float32`s of the same shape
-                # as `inputs` using either `torch.rand` or `torch.rand_like`.
-                # Then replace the inputs elements whose mask value is less than
-                # `self._mask_probability` with the value of `self._mask_value`.
-                inputs = ...
-            return inputs
-
     def __init__(self, args: argparse.Namespace, train: MorphoDataset.Dataset) -> None:
         super().__init__()
+        # TODO: Compute the transition matrix `A` of shape `[num_tags, num_tags]`, so
+        # that `A[i, j]` is 0/1 depending on whether the tag `j` is allowed to follow
+        # the tag `i` (according to our BIO encoding; not necessarily in the data).
+        # The tag strings can be obtained by calling `list(train.tags.word_vocab)`.
+        A = ...
+
+        # The following call will create `self._A` and it will become part of the object state.
+        self.register_buffer("_A", A)
 
         # Create all needed layers.
-        # TODO: Create a word masking layer `self.MaskElements` with the given
-        # `args.word_masking` probability and `MorphoDataset.UNK` as the masking value.
-        self._word_masking = ...
-
-        # TODO: Create a `torch.nn.Embedding` layer for embedding the character ids
-        # from `train.forms.char_vocab` to dimensionality `args.cle_dim`.
-        self._char_embedding = ...
-
-        # TODO: Create a `torch.nn.GRU` layer processing the character embeddings,
-        # producing output of dimensionality `args.cle_dim`, concatenating the
-        # outputs of forward and backward directions. Also pass `batch_first=True`.
-        self._char_rnn = ...
-
-        # TODO:(tagger_we) Create a `torch.nn.Embedding` layer, embedding the form ids
+        # TODO(tagger_we): Create a `torch.nn.Embedding` layer, embedding the form ids
         # from `train.forms.word_vocab` to dimensionality `args.we_dim`.
         self._word_embedding = ...
 
-        # TODO: Create an RNN layer, either `torch.nn.LSTM` or `torch.nn.GRU` depending
+        # TODO(tagger_we): Create an RNN layer, either `torch.nn.LSTM` or `torch.nn.GRU` depending
         # on `args.rnn`. The layer should be bidirectional (`bidirectional=True`), summing
-        # the outputs of forward and backward directions. The layer processes the above
-        # embeddings generated by the `self._word_embedding` layer, **now concatenated
-        # with the character-level embeddings**, and produces output of dimensionality
-        # `args.rnn_dim`; pass `batch_first=True` to the constructor.
+        # the outputs of forward and backward directions. The layer processes the word
+        # embeddings generated by the `self._word_embedding` layer and produces output
+        # of dimensionality `args.rnn_dim`. Finally, pass `batch_first=True` to the constructor.
         self._word_rnn = ...
 
         # TODO(tagger_we): Create an output linear layer (`torch.nn.Linear`) processing the RNN output,
@@ -266,39 +270,11 @@ class Model(TrainableModule):
         # removing this line to see how much worse the default PyTorch initialization is.
         self.apply(self.keras_init)
 
-    def forward(self, form_ids: torch.Tensor, unique_forms: torch.Tensor, form_indices: torch.Tensor) -> torch.Tensor:
-        # TODO: Mask the input `form_ids` using the `self._word_masking` layer.
-        form_ids = ...
-
-        # TODO(tagger_we): Embed the masked `form_ids` using the word embedding layer.
+    def forward(self, form_ids: torch.Tensor) -> torch.Tensor:
+        # TODO(tagger_we): Start by embedding the `form_ids` using the word embedding layer.
         hidden = ...
 
-        # TODO: Embed the `unique_forms` using the character embedding layer.
-        cle = ...
-
-        # TODO: Pass the character embeddings through the character-level RNN.
-        # As during word-level RNN, start by packing the input sequence.
-        packed = ...
-
-        # Pass the `PackedSequence` through the character RNN. Note that this time
-        # we are interested only in the second output (the last hidden state of the RNN).
-        _, cle = self._char_rnn(packed)
-
-        # TODO: Concatenate the states of the forward and backward directions.
-        cle = ...
-
-        # TODO: With `cle` being the character-level embeddings of the unique forms
-        # of shape `[num_unique_forms, 2 * cle_dim]`, create the representation of the
-        # (not necessary unique) sentence forms by indexing the character-level
-        # embeddings with the `form_indices`. The result should have a shape
-        # `[batch_size, max_sentence_length, 2 * cle_dim]`. You can use for example
-        # the `torch.nn.functional.embedding` function.
-        cle = ...
-
-        # TODO: Concatenate the word embeddings with the character-level embeddings (in this order).
-        hidden = ...
-
-        # TODO(tagger_we): Process the embeddings through the RNN layer. Because the sentences
+        # TODO(tagger_we): Process the embedded forms through the RNN layer. Because the sentences
         # have different length, you have to use `torch.nn.utils.rnn.pack_padded_sequence`
         # to construct a variable-length `PackedSequence` from the input. You need to compute
         # the length of each sentence in the batch (by counting non-`MorphoDataset.PAD` tokens);
@@ -321,6 +297,41 @@ class Model(TrainableModule):
 
         return hidden
 
+    def constrained_decoding(self, logits: torch.Tensor, form_ids: torch.Tensor) -> torch.Tensor:
+        # TODO: Perform constrained decoding, i.e., produce the most likely BIO-encoded
+        # valid sequence. In such a sequence, every neighboring pair of tags must be
+        # valid according to the transition matrix `self._A`. Additionally, a valid
+        # sequence cannot start with an "I-" tag -- a possible solution is to consider
+        # a tag sequence to be prefixed by a virtual "O" tag during decoding.
+        # Finally, the tags for padding tokens must be `MorphoDataset.PAD`s.
+        raise NotImplementedError
+
+    def compute_metrics(self, y_pred, y, form_ids, training):
+        self.metrics["accuracy"].update(y_pred, y)
+        if training:
+            return {"accuracy": self.metrics["accuracy"].compute()}
+
+        # Perform greedy decoding.
+        predictions_greedy = y_pred.argmax(dim=1)
+        predictions_greedy.masked_fill_(form_ids == MorphoDataset.PAD, MorphoDataset.PAD)
+        self.metrics["f1_greedy"].update(predictions_greedy, y)
+
+        # TODO: Perform constrained decoding by calling `self.constrained_decoding`
+        # on `y_pred` and `form_ids`.
+        predictions = ...
+        self.metrics["f1_constrained"].update(predictions, y)
+
+        return self.metrics.compute()
+
+    def predict_step(self, xs, as_numpy=True):
+        with torch.no_grad():
+            # Perform constrained decoding.
+            batch = self.constrained_decoding(self.forward(*xs), *xs)
+            # If `as_numpy==True`, trim the padding tags from the predictions.
+            if as_numpy:
+                batch = [np.trim_zeros(example, trim="b") for example in batch.numpy(force=True)]
+            return batch
+
 
 def main(args: argparse.Namespace) -> dict[str, float]:
     # Set the random seed and the number of threads.
@@ -338,7 +349,7 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     ))
 
     # Load the data
-    morpho = MorphoDataset("czech_cac", max_sentences=args.max_sentences)
+    morpho = MorphoDataset("czech_cnec", max_sentences=args.max_sentences)
 
     # Create the model and train
     model = Model(args, morpho.train)
@@ -350,31 +361,21 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         # To create the ids, use `word_vocab` of `morpho.train.forms` and `morpho.train.tags`.
         form_ids = ...
         tag_ids = ...
-        # Note that compared to `tagger_we`, we also return the original
-        # forms in order to be able to compute the character-level embeddings.
-        return form_ids, example["forms"], tag_ids
+        return form_ids, tag_ids
     train = morpho.train.transform(prepare_tagging_data)
     dev = morpho.dev.transform(prepare_tagging_data)
 
     def prepare_batch(data):
         # Construct a single batch, where `data` is a list of examples
         # generated by `prepare_tagging_data`.
-        form_ids, forms, tag_ids = zip(*data)
+        form_ids, tag_ids = zip(*data)
         # TODO(tagger_we): Combine `form_ids` into a single tensor, padding shorter
         # sequences to length of the longest sequence in the batch with zeros
         # using `torch.nn.utils.rnn.pad_sequence` with `batch_first=True` argument.
         form_ids = ...
-        # TODO: Create required inputs for the character-level embeddings using
-        # the provided `morpho.train.cle_batch` function on `forms`. The function
-        # returns a pair of two PyTorch tensors:
-        # - `unique_forms` with shape `[num_unique_forms, max_form_length]` containing
-        #   each unique form as a sequence of character ids,
-        # - `forms_indices` with shape `[num_sentences, max_sentence_length]`
-        #   containing for every form its index in `unique_forms`.
-        unique_forms, forms_indices = ...
         # TODO(tagger_we): Process `tag_ids` analogously to `form_ids`.
         tag_ids = ...
-        return (form_ids, unique_forms, forms_indices), tag_ids
+        return form_ids, tag_ids
     train = torch.utils.data.DataLoader(train, batch_size=args.batch_size, collate_fn=prepare_batch, shuffle=True)
     dev = torch.utils.data.DataLoader(dev, batch_size=args.batch_size, collate_fn=prepare_batch)
 
@@ -382,15 +383,21 @@ def main(args: argparse.Namespace) -> dict[str, float]:
         # TODO(tagger_we): Create the optimizer by creating an instance of
         # `torch.optim.Adam` which will train the `model.parameters()`.
         optimizer=...,
-        # TODO(tagger_we): Use `torch.nn.CrossEntropyLoss` to instantiate the loss function.
-        # Pass `ignore_index=morpho.PAD` to the constructor so that the padded
-        # tags are ignored during the loss computation. Note that the loss
-        # expects the input to be of shape `[batch_size, num_tags, sequence_length]`.
+        # TODO: Use `torch.nn.CrossEntropyLoss` to instantiate the loss function.
+        # Pass `ignore_index=morpho.PAD` to the constructor to ignore padding tags
+        # during loss computation; also pass `label_smoothing=args.label_smoothing`.
         loss=...,
-        # TODO(tagger_we): Create a `torchmetrics.Accuracy` metric, passing "multiclass" as
-        # the first argument, `num_classes` set to the number of unique tags, and
-        # again `ignore_index=morpho.PAD` to ignore the padded tags.
-        metrics={"accuracy": torchmetrics.Accuracy(...)},
+        metrics={
+            # TODO(tagger_we): Create a `torchmetrics.Accuracy` metric, passing "multiclass" as
+            # the first argument, `num_classes` set to the number of unique tags, and
+            # again `ignore_index=morpho.PAD` to ignore the padded tags.
+            "accuracy": torchmetrics.Accuracy(...),
+            # TODO: Create a `SpanEncodingF1Metric` for constrained decoding and also
+            # for greedy decoding, passing both a `list(morpho.train.tags.word_vocab)`
+            # and `ignore_index=morpho.PAD`.
+            "f1_constrained": ...,
+            "f1_greedy": ...,
+        },
         logdir=args.logdir,
     )
 
